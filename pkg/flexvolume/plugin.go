@@ -58,7 +58,7 @@ func mountCmd(cmd *cobra.Command, args []string) {
 	if err = ensureMountDir(mountDir); err != nil {
 		fail(err)
 	}
-	fname := path.Join(mountDir, options.TargetFileName)
+	fname := path.Join(mountDir, options.Target)
 	if err = ioutil.WriteFile(fname, cfgBytes, 0666); err != nil {
 		fail(err)
 	}

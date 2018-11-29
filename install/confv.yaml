@@ -59,8 +59,8 @@ spec:
         - /bin/sh
         - -c
         - >
-            mkdir /mnt/bin/dastanng.com~confv;
-            cp /usr/local/bin/confv /mnt/bin/dastanng.com~confv/
+            mkdir /mnt/bin/dunjut~confv;
+            cp /usr/local/bin/confv /mnt/bin/dunjut~confv/
         volumeMounts:
         - name: bin
           mountPath: /mnt/bin

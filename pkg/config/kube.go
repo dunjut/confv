@@ -30,9 +30,9 @@ func buildKubeClient() (*kubernetes.Clientset, error) {
 func getConfigTemplate(kube *kubernetes.Clientset, o *Options) (string, error) {
 	var (
 		m    = parseParamString(o.Template)
-		ns   = valueOrDefault(m["ns"], o.PodNamespace)
 		name = m["name"]
 		key  = m["key"]
+		ns   = o.PodNamespace
 	)
 	cm, err := kube.CoreV1().ConfigMaps(ns).Get(name, meta_v1.GetOptions{})
 	if err != nil {
@@ -48,9 +48,10 @@ func getConfigTemplate(kube *kubernetes.Clientset, o *Options) (string, error) {
 // getConfigTemplate retrieves config values from kubernetes configmap
 func getConfigValues(kube *kubernetes.Clientset, o *Options) (map[interface{}]interface{}, error) {
 	var (
-		m    = parseParamString(o.Values)
-		ns   = valueOrDefault(m["ns"], o.PodNamespace)
-		name = m["name"]
+		m            = parseParamString(o.Values)
+		name         = m["name"]
+		identifiedBy = m["identifiedBy"]
+		ns           = o.PodNamespace
 	)
 	cm, err := kube.CoreV1().ConfigMaps(ns).Get(name, meta_v1.GetOptions{})
 	if err != nil {
@@ -63,7 +64,7 @@ func getConfigValues(kube *kubernetes.Clientset, o *Options) (map[interface{}]in
 	}
 
 	var key string
-	switch o.IdentifiedBy {
+	switch identifiedBy {
 	case "hostIP":
 		key = pod.Status.HostIP
 	case "nodeName":
@@ -74,16 +75,9 @@ func getConfigValues(kube *kubernetes.Clientset, o *Options) (map[interface{}]in
 
 	valuesYaml, ok := cm.Data[key]
 	if !ok {
-		return nil, fmt.Errorf("cannot find config values for %s(%s) in %s/%s", key, o.IdentifiedBy, ns, name)
+		return nil, fmt.Errorf("cannot find config values for %s(%s) in %s/%s", key, identifiedBy, ns, name)
 	}
 	valuesMap := make(map[interface{}]interface{})
 	err = yaml.Unmarshal([]byte(valuesYaml), &valuesMap)
 	return valuesMap, err
-}
-
-func valueOrDefault(val, def string) string {
-	if val != "" {
-		return val
-	}
-	return def
 }

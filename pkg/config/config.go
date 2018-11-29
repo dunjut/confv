@@ -11,12 +11,11 @@ import (
 
 // Options is user specified volume options in the pod spec.
 type Options struct {
-	PodName        string `json:"kubernetes.io/pod.name"`
-	PodNamespace   string `json:"kubernetes.io/pod.namespace"`
-	Template       string `json:"template"`
-	Values         string `json:"values"`
-	IdentifiedBy   string `json:"identifiedBy"`
-	TargetFileName string `json:"targetFileName"`
+	PodName      string `json:"kubernetes.io/pod.name"`
+	PodNamespace string `json:"kubernetes.io/pod.namespace"`
+	Template     string `json:"template"`
+	Values       string `json:"values"`
+	Target       string `json:"target"`
 }
 
 func (o *Options) Validate() error {
@@ -31,18 +30,18 @@ func (o *Options) Validate() error {
 	}
 
 	m = parseParamString(o.Values)
-	if m["name"] == "" {
+	if m["name"] == "" || m["identifiedBy"] == "" {
 		return errors.New("options.values must have configmap name")
 	}
 
-	switch o.IdentifiedBy {
+	switch m["identifiedBy"] {
 	case "hostIP", "nodeName", "podName":
 	default:
-		return errors.New("options.identifiedBy must be one of hostIP|nodeName|podName")
+		return errors.New("options.values.identifiedBy must be one of hostIP|nodeName|podName")
 	}
 
-	if o.TargetFileName == "" {
-		return errors.New("options.targetFileName must be set")
+	if o.Target == "" || strings.Contains(o.Target, "/") {
+		return errors.New("options.target must be set to a pure filename without path prefix")
 	}
 	return nil
 }
