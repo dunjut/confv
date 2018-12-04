@@ -53,9 +53,9 @@ metadata:
 data:
   tpl: |-
     {
-      "role": "{{ .role }}",
-      {{- if .backup.enabled }}
-      "backupStorage": "{{ .backup.storage }}",
+      "role": "{{ .values.role }}",
+      {{- if .values.backup.enabled }}
+      "backupStorage": "{{ .values.backup.storage }}",
       {{- end }}
       "bindAddr": ":9999"
     }
@@ -84,7 +84,8 @@ data:
 ```
 
 Here we provide two instances' config values, one is `database-0` and the other is
-`database-1`. You should have noticed that their config values are different.
+`database-1`. These values can be referenced in configuration template with a
+'.values' prefix. You should have noticed that their config values are different.
 
 **Note:** config values MUST be in yaml format, otherwise confv won't know how to map
 these values to corresponding variables.
@@ -118,24 +119,33 @@ spec:
         flexVolume:
           driver: "dunjut/confv"
           options:
-            template: "name=myconfig,key=tpl"
-            values: "name=myvalues,identifiedBy=podName"
+            template: "myconfig/tpl"
+            values: "myvalues"
+            identifiedBy: "podName"
             target: "db.cnf"
 ```
 
 In this example, we mount our application config using a flexVolume. The driver here is
 `dunjut/confv` and the options are:
 
-**template**: specify where your config template lives, expected to be a ConfigMap.
-- name: name of the ConfigMap resource (namespace expected to be the same as Pod)
-- key: since a ConfigMap may contain multiple kv pairs, a key need to be specified.
+**template**: specify where your config template lives, expected to be a ConfigMap. You
+can either specify the full configmap name and key in format `<name>/<key>`, or you can
+omit the `/<key>` if there is exactly only one element in that configmap. Note namespace
+is restricted to be the same as Pod, so you don't have to explictly specify it.
 
-**values**: specify where your config values lives, expected to be a ConfigMap.
-- name: name of the ConfigMap resource (namespace expected to be the same as Pod)
-- identifiedBy: indicates how to define the application identity of each Pod, must be one
+**values**: specify where your config values lives, expected to be a ConfigMap. As
+'template', its namespace is expected to be the same as Pod.
+
+**identifiedBy**: indicates how to define the application identity of each Pod, must be one
 of `hostIP`, `nodeName` or `podName` (In the example we're using podName since it's
 predictable in a StatefulSet). This field will later be used as a key when getting values
 in the values ConfigMap.
+
+**sharedSecret**: this field is optional and not shown in the example, but it's useful
+when you also want to inject some secret info into configuration template using confv.
+Usually The sharedSecret holds some secret shared across all Pod instances. confv would
+put its values into '.sharedSecret' so you can reference them like '.sharedSecret.password'
+in template. As above, its namespace must be the same as Pod.
 
 **target**: specify what filename to use when writing rendered config.
 
