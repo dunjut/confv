@@ -1,8 +1,10 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,43 +30,72 @@ func buildKubeClient() (*kubernetes.Clientset, error) {
 
 // getConfigTemplate retrieves config template from kubernetes configmap
 func getConfigTemplate(kube *kubernetes.Clientset, o *Options) (string, error) {
+	if o.Template == "" {
+		return "", errors.New("options.template must be specified")
+	}
 	var (
-		m    = parseParamString(o.Template)
-		name = m["name"]
-		key  = m["key"]
-		ns   = o.PodNamespace
+		ns        = o.PodNamespace
+		name, key string
 	)
+	if pair := strings.SplitN(o.Template, "/", 2); len(pair) == 1 {
+		name = o.Template
+		// key is omitted by user, expect configmap has only one element
+	} else {
+		name = pair[0]
+		key = pair[1]
+	}
+
+	// retrieve template configmap
 	cm, err := kube.CoreV1().ConfigMaps(ns).Get(name, meta_v1.GetOptions{})
 	if err != nil {
 		return "", err
 	}
-	tpl, ok := cm.Data[key]
-	if !ok {
-		return "", fmt.Errorf("cannot find config template %s in %s/%s", key, ns, name)
+
+	// if key is set, return its corresponding data
+	if key != "" {
+		tpl, ok := cm.Data[key]
+		if !ok {
+			return "", fmt.Errorf("options.template %s not found", o.Template)
+		}
+		return tpl, nil
 	}
-	return tpl, nil
+
+	// key is not set, expect configmap has only one element
+	if len(cm.Data) != 1 {
+		return "", errors.New("template configmap must have only one element when key is not specified")
+	}
+	for _, tpl := range cm.Data {
+		return tpl, nil
+	}
+
+	// should not reach here
+	return "", errors.New("unexpected!!")
 }
 
 // getConfigTemplate retrieves config values from kubernetes configmap
 func getConfigValues(kube *kubernetes.Clientset, o *Options) (map[interface{}]interface{}, error) {
+	if o.Values == "" || o.IdentifiedBy == "" {
+		return nil, errors.New("options.values and options.identifiedBy must be specified")
+	}
 	var (
-		m            = parseParamString(o.Values)
-		name         = m["name"]
-		identifiedBy = m["identifiedBy"]
-		ns           = o.PodNamespace
+		ns   = o.PodNamespace
+		name = o.Values
+		id   = o.IdentifiedBy
+		key  string
 	)
+
+	// retrieve values configmap
 	cm, err := kube.CoreV1().ConfigMaps(ns).Get(name, meta_v1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	pod, err := kube.CoreV1().Pods(o.PodNamespace).Get(o.PodName, meta_v1.GetOptions{})
+	// determin configmap key according to options.identifiedBy
+	pod, err := kube.CoreV1().Pods(ns).Get(o.PodName, meta_v1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
-
-	var key string
-	switch identifiedBy {
+	switch id {
 	case "hostIP":
 		key = pod.Status.HostIP
 	case "nodeName":
@@ -75,9 +106,28 @@ func getConfigValues(kube *kubernetes.Clientset, o *Options) (map[interface{}]in
 
 	valuesYaml, ok := cm.Data[key]
 	if !ok {
-		return nil, fmt.Errorf("cannot find config values for %s(%s) in %s/%s", key, identifiedBy, ns, name)
+		return nil, fmt.Errorf("cannot find config values for %s(%s) in %s", key, id, name)
 	}
 	valuesMap := make(map[interface{}]interface{})
-	err = yaml.Unmarshal([]byte(valuesYaml), &valuesMap)
-	return valuesMap, err
+	if err = yaml.Unmarshal([]byte(valuesYaml), &valuesMap); err != nil {
+		return nil, err
+	}
+
+	configValues := make(map[interface{}]interface{})
+	configValues["values"] = valuesMap
+	if o.SharedSecret == "" {
+		return configValues, nil
+	}
+
+	// inject sharedSecret into configValues
+	secret, err := kube.CoreV1().Secrets(ns).Get(o.SharedSecret, meta_v1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	secretData := make(map[string]string)
+	for k, v := range secret.Data {
+		secretData[k] = string(v)
+	}
+	configValues["sharedSecret"] = secretData
+	return configValues, nil
 }

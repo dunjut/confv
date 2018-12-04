@@ -3,9 +3,7 @@ package config
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"strings"
 	"text/template"
 )
 
@@ -15,45 +13,15 @@ type Options struct {
 	PodNamespace string `json:"kubernetes.io/pod.namespace"`
 	Template     string `json:"template"`
 	Values       string `json:"values"`
+	IdentifiedBy string `json:"identifiedBy"`
+	SharedSecret string `json:"sharedSecret"`
 	Target       string `json:"target"`
-}
-
-func (o *Options) Validate() error {
-	if o.PodName == "" || o.PodNamespace == "" {
-		return errors.New("pod name and namespace must be set")
-	}
-
-	var m map[string]string
-	m = parseParamString(o.Template)
-	if m["name"] == "" || m["key"] == "" {
-		return errors.New("options.template must have configmap name and key")
-	}
-
-	m = parseParamString(o.Values)
-	if m["name"] == "" || m["identifiedBy"] == "" {
-		return errors.New("options.values must have configmap name")
-	}
-
-	switch m["identifiedBy"] {
-	case "hostIP", "nodeName", "podName":
-	default:
-		return errors.New("options.values.identifiedBy must be one of hostIP|nodeName|podName")
-	}
-
-	if o.Target == "" || strings.Contains(o.Target, "/") {
-		return errors.New("options.target must be set to a pure filename without path prefix")
-	}
-	return nil
 }
 
 // DecodeOptions decodes option values from raw json options.
 func DecodeOptions(rawOptions string) (*Options, error) {
 	o := new(Options)
-	if err := json.Unmarshal([]byte(rawOptions), o); err != nil {
-		return nil, err
-	}
-
-	return o, o.Validate()
+	return o, json.Unmarshal([]byte(rawOptions), o)
 }
 
 // RenderConfig returns raw bytes of rendered config.
@@ -87,16 +55,4 @@ func RenderConfig(o *Options) ([]byte, error) {
 	}
 
 	return renderedCfg.Bytes(), nil
-}
-
-func parseParamString(s string) map[string]string {
-	m := make(map[string]string)
-	for _, kv := range strings.Split(s, ",") {
-		if res := strings.Split(kv, "="); len(res) == 2 {
-			k := strings.TrimSpace(res[0])
-			v := strings.TrimSpace(res[1])
-			m[k] = v
-		}
-	}
-	return m
 }

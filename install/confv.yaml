@@ -16,7 +16,7 @@ metadata:
   name: confv-kube-system
 rules:
 - apiGroups: [""]
-  resources: ["pods", "configmaps"]
+  resources: ["pods", "configmaps", "secrets"]
   verbs: ["get"]
 
 ---
